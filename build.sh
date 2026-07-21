@@ -21,7 +21,7 @@ echo -e "
 
 
 #--------------------------------#
-# BUILD & LINT CONTAINER IMAGE    #
+# BUILD CONTAINER IMAGE    #
 #--------------------------------#
 "
 
@@ -40,8 +40,6 @@ podman build \
   -t "$IMAGE_TAG" \
   -f Containerfile \
   "$BASE_DIR"
-
-bootc container lint "$IMAGE_TAG"
 
 if [ -n "$REGISTRY" ] && [ -n "$IMAGE_NAME" ]; then
   REMOTE_TAG="${VERSION}-${CHANNEL}-${ARCH}.${YYYYMMDD}${OUTPUT_SUFFIX}"

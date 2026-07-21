@@ -36,3 +36,5 @@ RUN apt-get update \
 
 RUN mkdir -p /usr/lib/systemd/system/apparmor.service.d \
     && printf '[Unit]\nConditionPathExists=\n' > /usr/lib/systemd/system/apparmor.service.d/99_enable_in_live_mode.conf
+
+RUN bootc container lint
