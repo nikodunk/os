@@ -18,78 +18,81 @@ BASE_DIR="$PWD"
 source "$BASE_DIR"/"$CONFIG_FILE"
 
 echo -e "
-#----------------------#
-# INSTALL DEPENDENCIES #
-#----------------------#
+
+
+#--------------------------------#
+# BUILD & LINT CONTAINER IMAGE    #
+#--------------------------------#
 "
 
-apt-get update
-apt-get install -y live-build patch gnupg2 binutils zstd
+YYYYMMDD="$(date +%Y%m%d)"
+IMAGE_TAG="elementaryos-$VERSION-$CHANNEL-$ARCH.$YYYYMMDD$OUTPUT_SUFFIX"
+OUTPUT_DIR="$BASE_DIR/builds/$ARCH"
+mkdir -p "$OUTPUT_DIR"
 
-# The Debian repositories don't seem to have the `ubuntu-keyring` or `ubuntu-archive-keyring` packages
-# anymore, so we add the archive keys manually. This may need to be updated if Ubuntu changes their signing keys
-# To get the current key ID, find `ubuntu-keyring-xxxx-archive.gpg` in /etc/apt/trusted.gpg.d on a running
-# system and run `gpg --keyring /etc/apt/trusted.gpg.d/ubuntu-keyring-xxxx-archive.gpg --list-public-keys `
-gpg --homedir /tmp --no-default-keyring --keyring /etc/apt/trusted.gpg --recv-keys --keyserver keyserver.ubuntu.com F6ECB3762474EDA9D21B7022871920D1991BC93C
+podman build \
+  --build-arg CHANNEL="$CHANNEL" \
+  --build-arg BASECODENAME="$BASECODENAME" \
+  --build-arg VERSION="$VERSION" \
+  --build-arg CODENAME="$CODENAME" \
+  --build-arg NAME="$NAME" \
+  --build-arg ARCH="$ARCH" \
+  -t "$IMAGE_TAG" \
+  -f Containerfile \
+  "$BASE_DIR"
 
-# TODO: Remove this once debootstrap can natively build resolute images:
-ln -sfn /usr/share/debootstrap/scripts/gutsy /usr/share/debootstrap/scripts/resolute
+bootc container lint "$IMAGE_TAG"
 
-build () {
-  BUILD_ARCH="$1"
-
-  mkdir -p "$BASE_DIR/tmp/$BUILD_ARCH"
-  cd "$BASE_DIR/tmp/$BUILD_ARCH" || exit
-
-  # remove old configs and copy over new
-  rm -rf config auto
-  cp -r "$BASE_DIR"/etc/* .
-  # Make sure conffile specified as arg has correct name
-  cp -f "$BASE_DIR"/"$CONFIG_FILE" terraform.conf
+if [ -n "$REGISTRY" ] && [ -n "$IMAGE_NAME" ]; then
+  REMOTE_TAG="${VERSION}-${CHANNEL}-${ARCH}.${YYYYMMDD}${OUTPUT_SUFFIX}"
+  REMOTE_IMAGE="${REGISTRY}/${IMAGE_NAME}:${REMOTE_TAG}"
 
   echo -e "
-#------------------#
-# LIVE-BUILD CLEAN #
-#------------------#
-"
-  lb clean
-
-  echo -e "
-#-------------------#
-# LIVE-BUILD CONFIG #
-#-------------------#
-"
-  lb config
-
-  echo -e "
-#------------------#
-# LIVE-BUILD BUILD #
-#------------------#
-"
-  lb build
-
-  echo -e "
-#---------------------------#
-# MOVE OUTPUT TO BUILDS DIR #
-#---------------------------#
+#--------------------------------------------------------#
+# PUSH TO REGISTRY SO EXISTING INSTALLS CAN BOOTC UPDATE #
+#--------------------------------------------------------#
 "
 
-  YYYYMMDD="$(date +%Y%m%d)"
-  OUTPUT_DIR="$BASE_DIR/builds/$BUILD_ARCH"
-  mkdir -p "$OUTPUT_DIR"
-  FNAME="elementaryos-$VERSION-$CHANNEL-$BUILD_ARCH.$YYYYMMDD$OUTPUT_SUFFIX"
-  mv "$BASE_DIR/tmp/$BUILD_ARCH/live-image-$BUILD_ARCH.hybrid.iso" "$OUTPUT_DIR/${FNAME}.iso"
+  podman tag "$IMAGE_TAG" "$REMOTE_IMAGE"
+  podman push "$REMOTE_IMAGE"
 
-  # cd into output to so {FNAME}.sha256.txt only
-  # includes the filename and not the path to
-  # our file.
-  cd $OUTPUT_DIR
-  md5sum "${FNAME}.iso" | tee "${FNAME}.md5.txt"
-  sha256sum "${FNAME}.iso" | tee "${FNAME}.sha256.txt"
-  cd $BASE_DIR
-}
+  if [ "$CHANNEL" = "stable" ]; then
+    LATEST_IMAGE="${REGISTRY}/${IMAGE_NAME}:latest"
+    podman tag "$IMAGE_TAG" "$LATEST_IMAGE"
+    podman push "$LATEST_IMAGE"
+  fi
 
-# remove old builds before creating new ones
-rm -rf "$BASE_DIR"/builds
+  echo "Pushed: $REMOTE_IMAGE"
+fi
 
-build "$ARCH"
+echo -e "
+#---------------------------------------------#
+# GENERATE ISO FROM IMAGE FOR NEW INSTALLS    #
+#---------------------------------------------#
+"
+
+if [ "$BUILD_ISO" = "true" ]; then
+  podman run --rm --privileged \
+    -v /var/lib/containers/storage:/var/lib/containers/storage \
+    -v "$OUTPUT_DIR:/output" \
+    ghcr.io/osbuild/image-builder-cli:latest \
+    --type "bootc-generic-iso" \
+    "$IMAGE_TAG"
+
+  ISO_FILE=$(find "$OUTPUT_DIR" -maxdepth 1 -name "*.iso" -type f | head -1)
+  if [ -n "$ISO_FILE" ]; then
+    FNAME="elementaryos-$VERSION-$CHANNEL-$ARCH.$YYYYMMDD$OUTPUT_SUFFIX"
+    mv "$ISO_FILE" "$OUTPUT_DIR/${FNAME}.iso"
+    cd "$OUTPUT_DIR"
+    md5sum "${FNAME}.iso" | tee "${FNAME}.md5.txt"
+    sha256sum "${FNAME}.iso" | tee "${FNAME}.sha256.txt"
+    cd "$BASE_DIR"
+  fi
+fi
+
+echo -e "
+#------------------------#
+# IMAGE BUILT SUCCESSFULLY
+#------------------------#
+"
+echo "Image: $IMAGE_TAG"
