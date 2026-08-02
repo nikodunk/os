@@ -21,7 +21,7 @@ run-in-podman +command:
         -v "{{invocation_directory()}}:/work" \
         -w /work \
         -v "{{env_var('HOME')}}/.cache/mkosi-workspace:/workspace" \
-        ghcr.io/jumpyvi/mkosi-ubuntu:26 \
+        docker.io/library/fedora:rawhide \
         {{command}}
 
 build-iso:
