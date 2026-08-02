@@ -13,7 +13,7 @@ build-sysupdate:
 
 run-in-podman +command:
     mkdir -p {{env_var('HOME')}}/.cache/mkosi-workspace
-    
+    sudo podman build -t localhost/mkosi-builder:rawhide -f Containerfile .
     sudo podman run --rm -it \
         --privileged \
         --security-opt label=disable \
@@ -21,7 +21,7 @@ run-in-podman +command:
         -v "{{invocation_directory()}}:/work" \
         -w /work \
         -v "{{env_var('HOME')}}/.cache/mkosi-workspace:/workspace" \
-        docker.io/library/fedora:rawhide \
+        localhost/mkosi-builder:rawhide \
         {{command}}
 
 build-iso:
