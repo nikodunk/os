@@ -1,0 +1,65 @@
+name: Build and Release DDI (Elementary OS 9)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build Image and Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Maximize build space
+        uses: ublue-os/remove-unwanted-software@v8
+
+      - name: Install mkosi
+        uses: systemd/mkosi@v26
+
+      - name: Generate key
+        run: mkosi genkey
+
+      - name: Build image with mkosi
+        run: |
+          sudo mkosi -B --debug --force --profile=elementaryos
+
+      - name: Update permissions
+        run: sudo chown -R $USER:$USER mkosi.output
+
+      - name: Compress (xz7) usr.raw
+        run: |
+          find mkosi.output -type f -name "*.usr-*.raw" ! -name "*verity*" -exec xz -7v -T0 {} +
+
+      - name: Generate SHA256SUMS
+        run: |
+          cd mkosi.output
+          sha256sum *.efi *.usr-*.raw.xz *.usr-*-verity*.raw *.usr-*-verity-sig*.raw > SHA256SUMS
+          
+          echo "Generated SHA256SUMS:"
+          cat SHA256SUMS
+
+      - name: Extract Date
+        id: get_date
+        run: |
+          FILE_PATH=$(ls mkosi.output/Elementary_*.raw | head -n 1)
+          FILE_NAME=$(basename "$FILE_PATH")
+          TIMESTAMP=$(echo "$FILE_NAME" | sed 's/^Elementary_//;s/\..*//')
+
+          echo "RELEASE_TAG=os9-$TIMESTAMP" >> "$GITHUB_OUTPUT"
+          echo "Generated tag: os9-$TIMESTAMP"
+
+      - name: Create Release and Upload Artifacts
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ steps.get_date.outputs.RELEASE_TAG }}
+          name: Release ${{ steps.get_date.outputs.RELEASE_TAG }}
+          files: |
+            mkosi.output/*.efi
+            mkosi.output/*.usr-*.raw.xz
+            mkosi.output/*.usr-*-verity*.raw
+            mkosi.output/*.usr-*-verity-sig*.raw
+            mkosi.output/SHA256SUMS

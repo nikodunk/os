@@ -18,27 +18,22 @@
 <p align="center">
   <img src="https://github.com/elementary/os/actions/workflows/stable-8.1.yml/badge.svg" alt="Stable 8.1">
   <img src="https://github.com/elementary/os/actions/workflows/daily-8.1.yml/badge.svg" alt="Daily 8.1">
+  <img src="https://github.com/jumpyvi/elementary-atomic-os/actions/workflows/release.yaml/badge.svg" alt="Monthly 9.0">
 </p>
 
 ---
 
-## Building Locally
+## Building ISO Locally
 
-As elementary OS is built with the Debian version of `live-build`, not the Ubuntu patched version, it's easiest to build an elementary .iso in a Debian VM or container. This prevents messing up your host system too.
+1. Install `podman`
+2. Generate keys `just genkey`
+3. Build `just build-iso`
+4. `qemu-img resize mkosi.output/Elementary....raw 6G`
 
-The following example assumes you have Docker correctly installed and set up, and that your current working directory is this repo. When done, your image will be in the `builds` folder.
 
-Configure the channel (stable, daily) in the configuration file (`etc/terraform-amd64.conf` or `etc/terraform-arm64.conf` based on your host architecture), then run:
+### Install (qemu)
 
-```sh
-docker run --rm --privileged -it \
-    -v /proc:/proc \
-    -v ${PWD}:/working_dir \
-    -w /working_dir \
-    debian:latest \
-    ./build.sh
-```
-
-## Further Information
-
-More information about the concepts behind `live-build` and the technical decisions made to arrive at this set of tools to build an .iso can be found [on the wiki](https://github.com/elementary/os/wiki/Building-iso-Images).
+1. Add the iso as a disk
+2. Add a destination disk (Minimum tested is 70gb)
+3. Boot the liveiso
+4. Run `sudo elementary-install`
